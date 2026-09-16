@@ -28,7 +28,7 @@ public struct DeviceDetailView: View {
 
             VStack(spacing: 0) {
                 Text("Move around so that the signal strength increases.")
-                    .font(.system(size: 17, weight: .regular))
+                    .font(.system(size: 17, weight: .regular, design: .rounded))
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -47,11 +47,12 @@ public struct DeviceDetailView: View {
                 finderControls
                 Spacer(minLength: 10)
                 Button {
+                    HistoryStore.shared.save(device: liveDevice)
                     onStop()
                     dismiss()
                 } label: {
                     Text("I found it!")
-                        .font(.title3.weight(.semibold))
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
                         .foregroundStyle(.blue)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 18)
@@ -67,6 +68,21 @@ public struct DeviceDetailView: View {
 //        .toolbar(.hidden, for: .tabBar)
 //        .navigationBarTitleDisplayMode(.inline)
         .navigationTitle(device.displayName)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.black, for: .navigationBar)
+        .toolbarColorScheme(.dark, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(.white)
+                }
+                .accessibilityLabel("Close")
+            }
+        }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(device.displayName), signal strength \(signalPercentage) percent"))
         .onAppear {

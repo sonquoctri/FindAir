@@ -1,8 +1,13 @@
 import SwiftUI
+import CoreLocation
+import UIKit
 
 public struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @ObservedObject private var bluetoothManager = BluetoothManager.shared
+    @StateObject private var locationManager = LocationPermissionManager()
     @State private var page = 0
+    @State private var showSettingsAlert = false
 
     private let pages = OnboardingPage.allCases
 
@@ -27,30 +32,64 @@ public struct OnboardingView: View {
                             OnboardingPageView(page: page)
                                 .tag(index)
                         }
+
+                        BluetoothPermissionView()
+                            .tag(pages.count)
+
+                        LocationPermissionView()
+                            .tag(locationPage)
                     }
                     .tabViewStyle(.page(indexDisplayMode: .never))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                     onboardingFooter
-                        .frame(height: min(max(geometry.size.height * 0.18, 136), 166))
+                        .frame(height: page == locationPage
+                               ? min(max(geometry.size.height * 0.23, 190), 220)
+                               : min(max(geometry.size.height * 0.18, 136), 166))
                 }
             }
         }
         .preferredColorScheme(.dark)
+        .onChange(of: bluetoothManager.state) { state in
+            if isBluetoothReady && page == pages.count {
+                withAnimation(.easeInOut) {
+                    page = locationPage
+                }
+            }
+        }
+        .onChange(of: locationManager.authorizationStatus) { status in
+            if status == .authorizedAlways || status == .authorizedWhenInUse {
+                hasCompletedOnboarding = true
+            }
+        }
+        .alert("Bluetooth access is required", isPresented: $showSettingsAlert) {
+            Button("Open Settings") {
+                openAppSettings()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Allow Bluetooth access in Settings to find nearby devices.")
+        }
     }
 
     private var onboardingFooter: some View {
         VStack(spacing: 0) {
             Button {
-                if page == pages.count - 1 {
-                    hasCompletedOnboarding = true
+                if page == locationPage {
+                    if locationManager.authorizationStatus == .notDetermined {
+                        locationManager.requestPermission()
+                    } else if locationManager.isAuthorized {
+                        hasCompletedOnboarding = true
+                    }
+                } else if page == pages.count {
+                    requestBluetoothAccess()
                 } else {
                     withAnimation(.easeInOut) {
                         page += 1
                     }
                 }
             } label: {
-                Text("Continue")
+                Text(page == pages.count ? "Enable" : page == locationPage ? "Enable" : "Continue")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(.black)
                     .frame(maxWidth: 384)
@@ -60,15 +99,153 @@ public struct OnboardingView: View {
             }
             .padding(.horizontal, 32)
 
-            HStack(spacing: 12) {
-                ForEach(pages.indices, id: \.self) { index in
-                    Circle()
-                        .fill(index == page ? Color.white : Color.white.opacity(0.3))
-                        .frame(width: 10, height: 10)
+            if page == locationPage {
+                Button("Later") {
+                    hasCompletedOnboarding = true
                 }
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.white.opacity(0.7))
+                .padding(.top, 10)
             }
-            .padding(.top, 18)
+
+            if page < pages.count {
+                HStack(spacing: 12) {
+                    ForEach(pages.indices, id: \.self) { index in
+                        Circle()
+                            .fill(index == page ? Color.white : Color.white.opacity(0.3))
+                            .frame(width: 10, height: 10)
+                    }
+                }
+                .padding(.top, 18)
+            }
         }
+    }
+
+    private var isBluetoothReady: Bool {
+        bluetoothManager.state == .ready || bluetoothManager.state == .scanning
+    }
+
+    private var locationPage: Int {
+        pages.count + 1
+    }
+
+    private func requestBluetoothAccess() {
+        if bluetoothManager.state == .unauthorized {
+            showSettingsAlert = true
+        } else if isBluetoothReady {
+            withAnimation(.easeInOut) {
+                page = locationPage
+            }
+        } else {
+            bluetoothManager.requestAuthorizationIfNeeded()
+        }
+    }
+
+    private func openAppSettings() {
+        guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else {
+            return
+        }
+        UIApplication.shared.open(settingsURL)
+    }
+}
+
+private struct LocationPermissionView: View {
+    var body: some View {
+        VStack(spacing: 28) {
+            Spacer(minLength: 32)
+
+            Image(systemName: "location.fill")
+                .font(.system(size: 92, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 180, height: 180)
+                .background(
+                    RoundedRectangle(cornerRadius: 40, style: .continuous)
+                        .fill(Color.blue.opacity(0.75))
+                )
+                .shadow(color: .blue.opacity(0.4), radius: 24)
+
+            VStack(spacing: 16) {
+                Text("Enable Location")
+                    .font(.system(size: 25, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text("Location access helps FindAir guide you toward nearby devices.")
+                    .font(.title3)
+                    .foregroundStyle(Color.white.opacity(0.58))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 26)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private final class LocationPermissionManager: NSObject, ObservableObject, CLLocationManagerDelegate {
+    @Published private(set) var authorizationStatus: CLAuthorizationStatus
+
+    private let manager = CLLocationManager()
+
+    override init() {
+        authorizationStatus = manager.authorizationStatus
+        super.init()
+        manager.delegate = self
+    }
+
+    var isAuthorized: Bool {
+        authorizationStatus == .authorizedAlways || authorizationStatus == .authorizedWhenInUse
+    }
+
+    func requestPermission() {
+        manager.requestWhenInUseAuthorization()
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        authorizationStatus = manager.authorizationStatus
+    }
+
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
+        authorizationStatus = status
+    }
+}
+
+private struct BluetoothPermissionView: View {
+    var body: some View {
+        VStack(spacing: 28) {
+            Spacer(minLength: 32)
+
+            Image("BlueTooth")
+                .resizable()
+                .foregroundStyle(.white)
+                .frame(width: 180, height: 180)
+//                .background(
+//                    RoundedRectangle(cornerRadius: 42, style: .continuous)
+//                        .fill(
+//                            LinearGradient(
+//                                colors: [Color.blue.opacity(0.95), Color.blue.opacity(0.65)],
+//                                startPoint: .topLeading,
+//                                endPoint: .bottomTrailing
+//                            )
+//                        )
+//                )
+                .shadow(color: .blue.opacity(0.45), radius: 24)
+
+            VStack(spacing: 16) {
+                Text("Enable Bluetooth")
+                    .font(.system(size: 25, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text("Device tracker works best with access to Bluetooth and nearby devices.")
+                    .font(.title3)
+                    .foregroundStyle(Color.white.opacity(0.58))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 26)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

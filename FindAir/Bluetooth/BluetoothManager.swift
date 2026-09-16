@@ -50,8 +50,6 @@ public final class BluetoothManager: NSObject, ObservableObject, CBCentralManage
 
     override public init() {
         super.init()
-        centralManager = CBCentralManager(delegate: self, queue: scanQueue, options: [CBCentralManagerOptionShowPowerAlertKey: true])
-        updateState(for: centralManager?.state ?? .unknown)
     }
 
     public func startScan() {

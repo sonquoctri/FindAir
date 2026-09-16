@@ -7,6 +7,7 @@ public struct HomeView: View {
     @State private var category: DeviceCategory = .all
     @State private var showSettings = false
     @State private var showBluetoothAlert = false
+    @State private var selectedDevice: BluetoothDevice?
 
     public var body: some View {
         NavigationStack {
@@ -54,6 +55,11 @@ public struct HomeView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .fullScreenCover(item: $selectedDevice) { device in
+                NavigationStack {
+                    DeviceDetailView(device: device, onStop: {})
+                }
             }
             .alert("Bluetooth is turned off", isPresented: $showBluetoothAlert) {
                 
@@ -163,12 +169,12 @@ public struct HomeView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(filtered) { device in
-                        NavigationLink {
-                            DeviceDetailView(device: device, onStop: {})
+                        Button {
+                            selectedDevice = device
                         } label: {
                             DeviceRow(device: device)
                         }
-//                        .buttonStyle(.plain)
+                        .buttonStyle(.plain)
                     }
                 }
             }
