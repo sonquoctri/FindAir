@@ -4,7 +4,7 @@ public final class RSSIFilter {
     public var alpha: Double
     private var previousRSSI: Double?
 
-    public init(alpha: Double = 0.45) {
+    public init(alpha: Double = 0.15) {
         self.alpha = alpha
     }
 

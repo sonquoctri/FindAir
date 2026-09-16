@@ -1,77 +1,194 @@
 import SwiftUI
+import AudioToolbox
+import UIKit
 
 public struct DeviceDetailView: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var bluetoothManager: BluetoothManager
+    @State private var soundEnabled = false
+    @State private var vibrateEnabled = false
+    @State private var showLocationAlert = false
+    @State private var hasReachedSignalThreshold = false
+
     let device: BluetoothDevice
     let onStop: () -> Void
 
     public init(device: BluetoothDevice, onStop: @escaping () -> Void) {
         self.device = device
         self.onStop = onStop
+        self._bluetoothManager = ObservedObject(wrappedValue: BluetoothManager.shared)
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 24) {
-                Text(device.displayName)
-                    .font(.largeTitle.weight(.semibold))
+        let currentDevice = liveDevice
+
+        ZStack {
+            Color.black
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                Text("Move around so that the signal strength increases.")
+                    .font(.system(size: 17, weight: .regular))
                     .multilineTextAlignment(.center)
-                    .padding(.top)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: 320)
+                    .foregroundStyle(.gray)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 14)
 
-                RadarView(signalStrength: device.signalStrength, signalLevel: device.signalLevel)
+                Spacer(minLength: 10)
 
-                VStack(spacing: 8) {
-                    Text(device.signalLevel.title)
-                        .font(.title2.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text(device.trend.title)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(Text("Signal trend: \(device.trend.title)"))
-                }
+                RadarView(signalStrength: currentDevice.signalStrength, signalLevel: currentDevice.signalLevel)
+                    .frame(maxWidth: .infinity)
 
-                VStack(alignment: .leading, spacing: 10) {
-                    SignalMeterView(value: device.signalStrength, height: 14)
-                    HStack {
-                        Text("RSSI")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(device.rssi) dBm")
-                            .foregroundStyle(.primary)
-                    }
-                    HStack {
-                        Text("Last seen")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text(device.lastSeenText)
-                            .foregroundStyle(.primary)
-                    }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                Spacer(minLength: 36)
 
-                Text("Move around to improve the signal and locate your device. Bluetooth signal strength is only a proximity guide, not an exact distance measurement.")
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-
-                Button(action: onStop) {
-                    Label("Stop", systemImage: "xmark.circle.fill")
+                finderControls
+                Spacer(minLength: 10)
+                Button {
+                    onStop()
+                    dismiss()
+                } label: {
+                    Text("I found it!")
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.blue)
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 18)
+                        .background(Color.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
-                .buttonStyle(.borderedProminent)
-                .padding(.horizontal)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 28)
             }
-            .padding(.bottom, 32)
         }
-        .navigationBarTitleDisplayMode(.inline)
+//        .toolbarBackground(.black, for: .navigationBar)
+//        .toolbarColorScheme(.dark, for: .navigationBar)
+//        .toolbar(.hidden, for: .tabBar)
+//        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(device.displayName)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(device.displayName), \(device.signalLevel.title), \(device.trend.title)"))
+        .accessibilityLabel(Text("\(device.displayName), signal strength \(signalPercentage) percent"))
+        .onAppear {
+            handleSignalThresholdChange(for: currentDevice.signalStrength)
+        }
+        .onChange(of: currentDevice.signalStrength) { signalStrength in
+            handleSignalThresholdChange(for: signalStrength)
+        }
+        .alert("Location unavailable", isPresented: $showLocationAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("The map will open when the signal strength reaches 80%.")
+        }
+    }
+
+    private var liveDevice: BluetoothDevice {
+        bluetoothManager.discoveredDevices.first { $0.id == device.id } ?? device
+    }
+
+    private var finderControls: some View {
+        HStack(spacing: 18) {
+            FinderControl(
+                title: "Sound",
+                systemImage: "speaker.wave.2.fill",
+                isOn: soundEnabled
+            ) {
+                soundEnabled.toggle()
+                if soundEnabled && isSignalReady {
+                    playSound()
+                }
+            }
+
+            FinderControl(
+                title: "Vibrate",
+                systemImage: "iphone.radiowaves.left.and.right",
+                isOn: vibrateEnabled
+            ) {
+                vibrateEnabled.toggle()
+                if vibrateEnabled && isSignalReady {
+                    playVibration()
+                }
+            }
+
+            FinderControl(
+                title: "Location",
+                systemImage: "location.fill",
+                isOn: false
+            ) {
+                if isSignalReady {
+                } else {
+                    showLocationAlert = true
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+    }
+
+    private var isSignalReady: Bool {
+        liveDevice.signalStrength >= 0.8
+    }
+
+    private func handleSignalThresholdChange(for signalStrength: Double) {
+        let signalIsReady = signalStrength >= 0.8
+
+        if !signalIsReady {
+            hasReachedSignalThreshold = false
+            return
+        }
+
+        guard !hasReachedSignalThreshold else {
+            return
+        }
+
+        hasReachedSignalThreshold = true
+        if soundEnabled {
+            playSound()
+        }
+        if vibrateEnabled {
+            playVibration()
+        }
+    }
+
+    private func playSound() {
+        AudioServicesPlaySystemSound(1057)
+    }
+
+    private func playVibration() {
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+    }
+
+    private var signalPercentage: Int {
+        Int((liveDevice.signalStrength * 100).rounded())
     }
 }
 
-#Preview {
-    DeviceDetailView(device: BluetoothDevice(id: UUID(), name: "AirPods Pro", rssi: -47, smoothedRSSI: -47, signalStrength: 0.86, signalLevel: .veryClose, lastSeen: Date(), category: .audio, trend: .gettingCloser), onStop: {})
+private struct FinderControl: View {
+    let title: String
+    let systemImage: String
+    let isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 25, weight: .semibold))
+                    .foregroundStyle(isOn ? .blue : .gray)
+                    .frame(width: 60, height: 60)
+                    .background(isOn ? Color.blue.opacity(0.12) : Color.white.opacity(0.1))
+                    .clipShape(Circle())
+
+                Text(title)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(.gray)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(title), \(isOn ? "On" : "Off")"))
+    }
 }
+
+//#Preview {
+//    DeviceDetailView(device: BluetoothDevice(id: UUID(), name: "AirPods Pro", rssi: -47, smoothedRSSI: -47, signalStrength: 0.86, signalLevel: .veryClose, lastSeen: Date(), category: .audio, trend: .gettingCloser), onStop: {})
+//}

@@ -23,10 +23,10 @@ public struct DeviceRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(device.displayName)
                     .font(.headline)
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.white)
                 Text(device.signalLevel.title)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white)
                 SignalMeterView(value: device.signalStrength, height: 8)
                     .frame(width: 110)
             }
@@ -46,7 +46,7 @@ public struct DeviceRow: View {
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .background(isSelected ? Color.accentColor.opacity(0.12) : Color(.secondarySystemBackground))
+        .background(Color(red: 40/255, green: 40/255, blue: 40/255))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(device.displayName), \(device.signalLevel.title)"))

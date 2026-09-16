@@ -32,7 +32,7 @@ public enum BluetoothManagerState: String {
 }
 
 @MainActor
-public final class BluetoothManager: NSObject, ObservableObject, @preconcurrency CBCentralManagerDelegate {
+public final class BluetoothManager: NSObject, ObservableObject, CBCentralManagerDelegate {
     @Published public var state: BluetoothManagerState = .unsupported
     @Published public var isScanning = false
     @Published public var discoveredDevices: [BluetoothDevice] = []
@@ -102,8 +102,12 @@ public final class BluetoothManager: NSObject, ObservableObject, @preconcurrency
     }
 
     public func requestAuthorizationIfNeeded() {
+        shouldScan = true
+
         if centralManager == nil {
             centralManager = CBCentralManager(delegate: self, queue: scanQueue, options: [CBCentralManagerOptionShowPowerAlertKey: true])
+        } else if centralManager?.state == .poweredOn {
+            startScan()
         }
     }
 
@@ -120,8 +124,12 @@ public final class BluetoothManager: NSObject, ObservableObject, @preconcurrency
     public nonisolated func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         Task { @MainActor in
             let rawRSSI = RSSI.intValue
-            let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? "Unknown Device"
-            let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Unknown Device" : name
+            let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name ?? ""
+            let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !displayName.isEmpty else {
+                return
+            }
 
             let existingIndex = discoveredDevices.firstIndex { $0.id == peripheral.identifier }
             let filter = filterCache[peripheral.identifier, default: RSSIFilter()]
@@ -164,14 +172,10 @@ public final class BluetoothManager: NSObject, ObservableObject, @preconcurrency
                 discoveredDevices.append(updatedDevice)
             }
 
-            discoveredDevices = discoveredDevices
-                .filter { Date().timeIntervalSince($0.lastSeen) <= staleThreshold }
-                .sorted { lhs, rhs in
-                    if lhs.signalLevel == rhs.signalLevel {
-                        return lhs.lastSeen > rhs.lastSeen
-                    }
-                    return lhs.signalLevel.rawValue > rhs.signalLevel.rawValue
-                }
+            let cutoff = Date().addingTimeInterval(-staleThreshold)
+            if discoveredDevices.contains(where: { $0.lastSeen < cutoff }) {
+                discoveredDevices.removeAll { $0.lastSeen < cutoff }
+            }
 
             if discoveredDevices.count == 0 {
                 statusMessage = "No nearby Bluetooth devices found. Move closer and try scanning again."
