@@ -47,6 +47,8 @@ public final class BluetoothManager: NSObject, ObservableObject, CBCentralManage
     private var filterCache: [UUID: RSSIFilter] = [:]
     private var historyCache: [UUID: [Double]] = [:]
     private var shouldScan = false
+    private let rankingInterval: TimeInterval = 5.0
+    private var rankingTimer: Timer?
 
     override public init() {
         super.init()
@@ -66,6 +68,7 @@ public final class BluetoothManager: NSObject, ObservableObject, CBCentralManage
                 isScanning = true
                 state = .scanning
                 statusMessage = "Scanning for nearby devices..."
+                startRankingTimer()
             }
         case .poweredOff:
             shouldScan = false
@@ -95,6 +98,8 @@ public final class BluetoothManager: NSObject, ObservableObject, CBCentralManage
         shouldScan = false
         isScanning = false
         centralManager?.stopScan()
+        rankingTimer?.invalidate()
+        rankingTimer = nil
         state = .stopped
         statusMessage = "Scan paused."
     }
@@ -227,5 +232,30 @@ public final class BluetoothManager: NSObject, ObservableObject, CBCentralManage
     public func pruneStaleDevices() {
         let cutoff = Date().addingTimeInterval(-staleThreshold)
         discoveredDevices = discoveredDevices.filter { $0.lastSeen >= cutoff }
+    }
+
+    private func startRankingTimer() {
+        guard rankingTimer == nil else {
+            return
+        }
+
+        rankingTimer = Timer.scheduledTimer(withTimeInterval: rankingInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.rankDevicesBySignal()
+            }
+        }
+    }
+
+    private func rankDevicesBySignal() {
+        guard discoveredDevices.count > 1 else {
+            return
+        }
+
+        discoveredDevices = discoveredDevices.enumerated().sorted { lhs, rhs in
+            if lhs.element.signalStrength == rhs.element.signalStrength {
+                return lhs.offset < rhs.offset
+            }
+            return lhs.element.signalStrength > rhs.element.signalStrength
+        }.map(\.element)
     }
 }

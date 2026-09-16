@@ -71,6 +71,11 @@ private struct RootView: View {
                         .tabItem {
                             Label("History", systemImage: "clock.arrow.circlepath")
                         }
+
+                    SettingsView()
+                        .tabItem {
+                            Label("Settings", systemImage: "gearshape.fill")
+                        }
                 }
                 .toolbarBackground(.visible, for: .tabBar)
                 .toolbarBackground(Color.black, for: .tabBar)

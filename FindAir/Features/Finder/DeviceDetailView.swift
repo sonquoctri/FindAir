@@ -5,10 +5,13 @@ import UIKit
 public struct DeviceDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var bluetoothManager: BluetoothManager
-    @State private var soundEnabled = false
-    @State private var vibrateEnabled = false
+    @AppStorage("soundEnabled") private var soundEnabled = false
+    @AppStorage("vibrateEnabled") private var vibrateEnabled = false
+    @AppStorage("locationEnabled") private var locationEnabled = true
     @State private var showLocationAlert = false
     @State private var hasReachedSignalThreshold = false
+
+    private let soundPulse = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
     let device: BluetoothDevice
     let onStop: () -> Void
@@ -91,6 +94,16 @@ public struct DeviceDetailView: View {
         .onChange(of: currentDevice.signalStrength) { signalStrength in
             handleSignalThresholdChange(for: signalStrength)
         }
+        .onChange(of: soundEnabled) { enabled in
+            if enabled && isSignalReady {
+                playSound()
+            }
+        }
+        .onReceive(soundPulse) { _ in
+            if soundEnabled && isSignalReady {
+                playSound()
+            }
+        }
         .alert("Location unavailable", isPresented: $showLocationAlert) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -110,9 +123,6 @@ public struct DeviceDetailView: View {
                 isOn: soundEnabled
             ) {
                 soundEnabled.toggle()
-                if soundEnabled && isSignalReady {
-                    playSound()
-                }
             }
 
             FinderControl(
@@ -129,9 +139,9 @@ public struct DeviceDetailView: View {
             FinderControl(
                 title: "Location",
                 systemImage: "location.fill",
-                isOn: false
+                isOn: locationEnabled
             ) {
-                if isSignalReady {
+                if locationEnabled && isSignalReady {
                 } else {
                     showLocationAlert = true
                 }
