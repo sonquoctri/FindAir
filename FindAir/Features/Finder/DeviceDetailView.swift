@@ -10,6 +10,7 @@ public struct DeviceDetailView: View {
     @AppStorage("locationEnabled") private var locationEnabled = true
     @State private var showLocationAlert = false
     @State private var hasReachedSignalThreshold = false
+    @State private var showCurrentLocationMap = false
 
     private let soundPulse = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
@@ -109,6 +110,9 @@ public struct DeviceDetailView: View {
         } message: {
             Text("The map will open when the signal strength reaches 80%.")
         }
+        .fullScreenCover(isPresented: $showCurrentLocationMap) {
+            CurrentLocationMapView()
+        }
     }
 
     private var liveDevice: BluetoothDevice {
@@ -142,6 +146,7 @@ public struct DeviceDetailView: View {
                 isOn: locationEnabled
             ) {
                 if locationEnabled && isSignalReady {
+                    showCurrentLocationMap = true
                 } else {
                     showLocationAlert = true
                 }

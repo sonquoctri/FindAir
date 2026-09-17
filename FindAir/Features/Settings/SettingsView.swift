@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import SafariServices
 import UIKit
 
 public struct SettingsView: View {
@@ -14,6 +15,7 @@ public struct SettingsView: View {
     @State private var pendingLocationRequest = false
     @State private var showLocationAlert = false
     @State private var showSubscription = false
+    @State private var webURL: URL?
 
     public var body: some View {
         NavigationStack {
@@ -24,6 +26,7 @@ public struct SettingsView: View {
                     } label: {
                         Label("Unlock Premium Features", systemImage: "sparkles")
                     }
+                    .frame(height: 40)
                 }
 
                 Section("Finder") {
@@ -43,8 +46,12 @@ public struct SettingsView: View {
 
 
                 Section("About") {
-                    Link("Privacy Policy", destination: URL(string: "https://sites.google.com/view/sonquoctri/privacy-policy")!)
-                    Link("Terms of Use", destination: URL(string: "https://sites.google.com/view/sonquoctri/terms-of-use")!)
+                    Button("Privacy Policy") {
+                        webURL = URL(string: "https://sites.google.com/view/sonquoctri/privacy-policy")
+                    }
+                    Button("Terms of Use") {
+                        webURL = URL(string: "https://sites.google.com/view/sonquoctri/terms-of-use")
+                    }
                 }
             }
             .navigationTitle("Settings")
@@ -52,6 +59,11 @@ public struct SettingsView: View {
             .fullScreenCover(isPresented: $showSubscription) {
                 NavigationStack {
                     SubscriptionView()
+                }
+            }
+            .sheet(isPresented: webSheetPresented) {
+                if let webURL {
+                    SettingsSafariView(url: webURL)
                 }
             }
         }
@@ -103,6 +115,27 @@ public struct SettingsView: View {
         }
         UIApplication.shared.open(settingsURL)
     }
+
+    private var webSheetPresented: Binding<Bool> {
+        Binding(
+            get: { webURL != nil },
+            set: { isPresented in
+                if !isPresented {
+                    webURL = nil
+                }
+            }
+        )
+    }
+}
+
+private struct SettingsSafariView: UIViewControllerRepresentable {
+    let url: URL
+
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        SFSafariViewController(url: url)
+    }
+
+    func updateUIViewController(_ viewController: SFSafariViewController, context: Context) {}
 }
 
 private final class SettingsLocationPermission: NSObject, ObservableObject, CLLocationManagerDelegate {
