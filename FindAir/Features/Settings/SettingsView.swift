@@ -13,10 +13,19 @@ public struct SettingsView: View {
     @StateObject private var locationPermission = SettingsLocationPermission()
     @State private var pendingLocationRequest = false
     @State private var showLocationAlert = false
+    @State private var showSubscription = false
 
     public var body: some View {
         NavigationStack {
             List {
+                Section("Subscription") {
+                    Button {
+                        showSubscription = true
+                    } label: {
+                        Label("Unlock Premium Features", systemImage: "sparkles")
+                    }
+                }
+
                 Section("Finder") {
                     Toggle("Sound", isOn: $soundEnabled).tint(.blue)
                     Toggle("Vibrate", isOn: $vibrateEnabled).tint(.blue)
@@ -34,12 +43,17 @@ public struct SettingsView: View {
 
 
                 Section("About") {
-                    Link("Privacy Policy", destination: URL(string: "https://example.com/privacy")!)
-                    Link("Terms of Use", destination: URL(string: "https://example.com/terms")!)
+                    Link("Privacy Policy", destination: URL(string: "https://sites.google.com/view/sonquoctri/privacy-policy")!)
+                    Link("Terms of Use", destination: URL(string: "https://sites.google.com/view/sonquoctri/terms-of-use")!)
                 }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .fullScreenCover(isPresented: $showSubscription) {
+                NavigationStack {
+                    SubscriptionView()
+                }
+            }
         }
         .preferredColorScheme(.dark)
         .presentationDetents([.medium, .large])

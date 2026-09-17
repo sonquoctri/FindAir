@@ -88,3 +88,7 @@ private struct RootView: View {
 }
     
 }
+
+
+//"com.sqt.FindAir.LifeTime"
+//"com.sqt.FindAir.Weekly"

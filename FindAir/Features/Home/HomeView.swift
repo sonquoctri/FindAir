@@ -8,6 +8,7 @@ public struct HomeView: View {
     @State private var showSettings = false
     @State private var showBluetoothAlert = false
     @State private var selectedDevice: BluetoothDevice?
+    @State private var showSubscription = false
 
     public var body: some View {
         NavigationStack {
@@ -59,6 +60,11 @@ public struct HomeView: View {
             .fullScreenCover(item: $selectedDevice) { device in
                 NavigationStack {
                     DeviceDetailView(device: device, onStop: {})
+                }
+            }
+            .fullScreenCover(isPresented: $showSubscription) {
+                NavigationStack {
+                    SubscriptionView()
                 }
             }
             .alert("Bluetooth is turned off", isPresented: $showBluetoothAlert) {
@@ -170,7 +176,14 @@ public struct HomeView: View {
                 VStack(spacing: 10) {
                     ForEach(filtered) { device in
                         Button {
-                            selectedDevice = device
+                            
+                            if SubscriptionStore.shared.hasPremiumAccess {
+                                // Mở tính năng premium
+                                selectedDevice = device
+                            } else {
+                                // Hiển thị SubscriptionView
+                                showSubscription = true
+                            }
                         } label: {
                             DeviceRow(device: device)
                         }
@@ -219,9 +232,10 @@ private struct SearchBar: View {
             TextField("Search devices...", text: $text)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .foregroundStyle(.black)
         }
         .padding(12)
-        .background(Color(.secondarySystemBackground))
+        .background(.white)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
