@@ -176,7 +176,7 @@ public struct HomeView: View {
                 VStack(spacing: 10) {
                     ForEach(filtered) { device in
                         Button {
-                            
+//                            selectedDevice = device
                             if SubscriptionStore.shared.hasPremiumAccess {
                                 // Mở tính năng premium
                                 selectedDevice = device
